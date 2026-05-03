@@ -1,4 +1,4 @@
-# DEKNEK
+# NOTES APP
 
 A modern, secure, full-stack web application for organizing your thoughts and notes. Built with Node.js, Express, and a beautiful vanilla HTML/CSS/JS frontend featuring a glassmorphism design system.
 
