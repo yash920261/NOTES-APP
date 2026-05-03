@@ -40,25 +40,26 @@ app.use(session({
   }
 }));
 
-// Static files
-app.use(express.static(path.join(__dirname, 'public')));
-
 // API routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/notes', notesRoutes);
 
-// SPA fallback
+// In production, serve the React build
+const clientBuildPath = path.join(__dirname, 'client', 'dist');
+app.use(express.static(clientBuildPath));
+
+// SPA fallback — serve React index.html for all non-API routes
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found' });
   }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
 // Initialize database then start server
 initDb().then(() => {
   app.listen(PORT, () => {
-    console.log(`\n  🚀 DEKNEK server running at http://localhost:${PORT}\n`);
+    console.log(`\n  🚀 NOTES APP server running at http://localhost:${PORT}\n`);
   });
 }).catch(err => {
   console.error('Failed to initialize database:', err);
