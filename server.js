@@ -12,6 +12,22 @@ const notesRoutes = require('./routes/notes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Initialize Database asynchronously
+let dbInitialized = false;
+const dbPromise = initDb().then(() => {
+  dbInitialized = true;
+}).catch(err => {
+  console.error('Failed to initialize database:', err);
+});
+
+// Middleware to ensure DB is ready before any request
+app.use(async (req, res, next) => {
+  if (!dbInitialized) {
+    await dbPromise;
+  }
+  next();
+});
+
 // Security headers
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
@@ -56,12 +72,14 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
-// Initialize database then start server
-initDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`\n  🚀 NOTES APP server running at http://localhost:${PORT}\n`);
+// Export the app for Vercel Serverless Functions
+module.exports = app;
+
+// Only start the server locally (Vercel invokes the exported app directly)
+if (!process.env.VERCEL) {
+  dbPromise.then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n  🚀 NOTES APP server running at http://localhost:${PORT}\n`);
+    });
   });
-}).catch(err => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
-});
+}
