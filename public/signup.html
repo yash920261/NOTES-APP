@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign up — DEKNEK</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="bg-glow"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+  <nav class="navbar"><a href="/" class="logo">DEKNEK</a><div class="nav-links"><a href="/login.html">Log in</a></div></nav>
+
+  <div class="auth-container">
+    <div class="auth-card">
+      <h1>Create account</h1>
+      <p class="subtitle">Start organizing your ideas in seconds</p>
+
+      <div id="alert" class="alert"></div>
+
+      <form id="signupForm" autocomplete="on">
+        <div class="form-group">
+          <label for="displayName">Display Name</label>
+          <input type="text" id="displayName" class="form-input" placeholder="John Doe" autofocus>
+        </div>
+        <div class="form-group">
+          <label for="username">Username *</label>
+          <input type="text" id="username" class="form-input" placeholder="johndoe" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+">
+        </div>
+        <div class="form-group">
+          <label for="email">Email *</label>
+          <input type="email" id="email" class="form-input" placeholder="you@example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password *</label>
+          <div class="password-wrapper">
+            <input type="password" id="password" class="form-input" placeholder="Min 6 characters" required minlength="6">
+            <button type="button" class="password-toggle" onclick="togglePassword()">👁</button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%" id="submitBtn">
+          <span class="btn-text">Create account</span><span class="spinner"></span>
+        </button>
+      </form>
+
+      <div class="auth-footer">Already have an account? <a href="/login.html">Sign in</a></div>
+    </div>
+  </div>
+
+  <script>
+    function togglePassword() {
+      const p = document.getElementById('password');
+      p.type = p.type === 'password' ? 'text' : 'password';
+    }
+    function showAlert(msg, type) {
+      const el = document.getElementById('alert');
+      el.textContent = msg; el.className = `alert ${type} show`;
+    }
+
+    document.getElementById('signupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.classList.add('loading'); btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            displayName: document.getElementById('displayName').value.trim(),
+            username: document.getElementById('username').value.trim(),
+            email: document.getElementById('email').value.trim(),
+            password: document.getElementById('password').value
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showAlert('Account created! Redirecting...', 'success');
+        setTimeout(() => window.location.href = '/dashboard.html', 600);
+      } catch (err) {
+        showAlert(err.message || 'Signup failed', 'error');
+        btn.classList.remove('loading'); btn.disabled = false;
+      }
+    });
+
+    fetch('/api/auth/me').then(r => { if (r.ok) window.location.href = '/dashboard.html'; });
+  </script>
+</body>
+</html>

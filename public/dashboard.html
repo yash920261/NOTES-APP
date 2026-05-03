@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — DEKNEK</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="bg-glow"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+
+  <nav class="navbar">
+    <a href="/" class="logo">DEKNEK</a>
+    <div class="nav-links">
+      <span id="navUser" style="color:var(--text-secondary);font-size:0.85rem"></span>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">Log out</button>
+    </div>
+  </nav>
+
+  <div class="dashboard">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="user-info">
+        <div class="avatar" id="sidebarAvatar">?</div>
+        <div class="user-details">
+          <h3 id="sidebarName">Loading...</h3>
+          <p id="sidebarEmail">...</p>
+        </div>
+      </div>
+      <button class="nav-item active" onclick="showSection('notes')" id="nav-notes">📝 My Notes</button>
+      <button class="nav-item" onclick="showSection('profile')" id="nav-profile">👤 Profile</button>
+      <div class="nav-spacer"></div>
+      <button class="nav-item" onclick="logout()" style="color:var(--error)">🚪 Log out</button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Notes Section -->
+      <section id="section-notes">
+        <div class="page-header">
+          <div><h2>My Notes</h2><p id="noteCount">Loading your notes...</p></div>
+          <button class="btn btn-primary" onclick="openNoteModal()">+ New Note</button>
+        </div>
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="notes-grid" id="notesGrid"></div>
+        <div class="empty-state hidden" id="emptyState">
+          <div class="empty-icon">📭</div>
+          <h3>No notes yet</h3>
+          <p>Create your first note to get started!</p>
+        </div>
+      </section>
+
+      <!-- Profile Section -->
+      <section id="section-profile" class="hidden">
+        <div class="page-header"><div><h2>Profile</h2><p>Manage your account settings</p></div></div>
+        <div class="profile-section">
+          <div class="profile-header">
+            <div class="big-avatar" id="profileAvatar">?</div>
+            <div class="profile-info">
+              <h2 id="profileName">Loading...</h2>
+              <p id="profileJoined">Member since ...</p>
+            </div>
+          </div>
+          <div class="profile-form">
+            <h3>Edit Profile</h3>
+            <div id="profileAlert" class="alert"></div>
+            <form id="profileForm">
+              <div class="form-group">
+                <label for="profileDisplayName">Display Name</label>
+                <input type="text" id="profileDisplayName" class="form-input">
+              </div>
+              <div class="form-group">
+                <label for="profileEmail">Email</label>
+                <input type="email" id="profileEmail" class="form-input">
+              </div>
+              <div class="form-group">
+                <label for="currentPassword">Current Password (for password change)</label>
+                <input type="password" id="currentPassword" class="form-input" placeholder="Leave blank to keep current">
+              </div>
+              <div class="form-group">
+                <label for="newPassword">New Password</label>
+                <input type="password" id="newPassword" class="form-input" placeholder="Min 6 characters">
+              </div>
+              <button type="submit" class="btn btn-primary" id="profileSubmit">
+                <span class="btn-text">Save Changes</span><span class="spinner"></span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Note Modal -->
+  <div class="modal-overlay" id="noteModal">
+    <div class="modal">
+      <h2 id="modalTitle">New Note</h2>
+      <div id="modalAlert" class="alert"></div>
+      <form id="noteForm">
+        <input type="hidden" id="noteId">
+        <div class="form-group">
+          <label for="noteTitle">Title</label>
+          <input type="text" id="noteTitle" class="form-input" placeholder="Give your note a title" required>
+        </div>
+        <div class="form-group">
+          <label for="noteContent">Content</label>
+          <textarea id="noteContent" class="form-input" rows="5" placeholder="Write something..." style="resize:vertical"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Color</label>
+          <div class="color-picker" id="colorPicker"></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeNoteModal()">Cancel</button>
+          <button type="button" class="btn btn-danger hidden" id="deleteNoteBtn" onclick="deleteNote()">Delete</button>
+          <button type="submit" class="btn btn-primary" id="noteSubmitBtn">
+            <span class="btn-text">Save Note</span><span class="spinner"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal" style="max-width:400px;text-align:center">
+      <h2>Delete Note?</h2>
+      <p style="color:var(--text-secondary);margin-bottom:24px">This action cannot be undone.</p>
+      <div class="modal-actions" style="justify-content:center">
+        <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn" onclick="confirmDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    // ===== State =====
+    let currentUser = null;
+    let notes = [];
+    let selectedColor = '#6C63FF';
+    let deleteTargetId = null;
+    const COLORS = ['#6C63FF','#FF6584','#43E97B','#F7971E','#00C9FF','#FC5C7D','#6A82FB','#FC466B','#11998E','#38EF7D'];
+
+    // ===== Init =====
+    async function init() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) { window.location.href = '/login.html'; return; }
+        const data = await res.json();
+        currentUser = data.user;
+        renderUserInfo();
+        await loadNotes();
+      } catch { window.location.href = '/login.html'; }
+    }
+
+    function renderUserInfo() {
+      const u = currentUser;
+      const initial = (u.displayName || u.username)[0].toUpperCase();
+      document.getElementById('navUser').textContent = `Hey, ${u.displayName || u.username}`;
+      document.getElementById('sidebarAvatar').textContent = initial;
+      document.getElementById('sidebarAvatar').style.background = u.avatarColor;
+      document.getElementById('sidebarName').textContent = u.displayName || u.username;
+      document.getElementById('sidebarEmail').textContent = `@${u.username}`;
+      document.getElementById('profileAvatar').textContent = initial;
+      document.getElementById('profileAvatar').style.background = u.avatarColor;
+      document.getElementById('profileName').textContent = u.displayName || u.username;
+      document.getElementById('profileJoined').textContent = `Member since ${new Date(u.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+      document.getElementById('profileDisplayName').value = u.displayName || '';
+      document.getElementById('profileEmail').value = u.email;
+
+      document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card"><div class="stat-icon">📝</div><div class="stat-label">TOTAL NOTES</div><div class="stat-value">${u.stats.notes}</div></div>
+        <div class="stat-card"><div class="stat-icon">📌</div><div class="stat-label">PINNED</div><div class="stat-value">${notes.filter(n=>n.pinned).length}</div></div>
+        <div class="stat-card"><div class="stat-icon">🔐</div><div class="stat-label">LOGINS</div><div class="stat-value">${u.stats.logins}</div></div>
+      `;
+    }
+
+    // ===== Notes =====
+    async function loadNotes() {
+      const res = await fetch('/api/notes');
+      const data = await res.json();
+      notes = data.notes;
+      renderNotes();
+      renderUserInfo();
+    }
+
+    function renderNotes() {
+      const grid = document.getElementById('notesGrid');
+      const empty = document.getElementById('emptyState');
+      document.getElementById('noteCount').textContent = `${notes.length} note${notes.length!==1?'s':''}`;
+
+      if (notes.length === 0) { grid.innerHTML = ''; empty.classList.remove('hidden'); return; }
+      empty.classList.add('hidden');
+
+      grid.innerHTML = notes.map(n => `
+        <div class="note-card" onclick="openNoteModal(${n.id})">
+          <div class="note-color-bar" style="background:${n.color}"></div>
+          ${n.pinned ? '<span class="pin-badge">📌</span>' : ''}
+          <h3>${esc(n.title)}</h3>
+          <p>${esc(n.content)}</p>
+          <div class="note-meta">
+            <span>${timeAgo(n.updated_at)}</span>
+            <div class="note-actions">
+              <button class="btn-icon" style="width:30px;height:30px" onclick="event.stopPropagation();togglePin(${n.id})" title="${n.pinned?'Unpin':'Pin'}">📌</button>
+              <button class="btn-icon" style="width:30px;height:30px" onclick="event.stopPropagation();deleteNote(${n.id})" title="Delete">🗑</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openNoteModal(id) {
+      const modal = document.getElementById('noteModal');
+      const form = document.getElementById('noteForm');
+      form.reset();
+      document.getElementById('modalAlert').className = 'alert';
+      initColorPicker();
+
+      if (id) {
+        const note = notes.find(n => n.id === id);
+        if (!note) return;
+        document.getElementById('modalTitle').textContent = 'Edit Note';
+        document.getElementById('noteId').value = note.id;
+        document.getElementById('noteTitle').value = note.title;
+        document.getElementById('noteContent').value = note.content;
+        selectedColor = note.color;
+        document.getElementById('deleteNoteBtn').classList.remove('hidden');
+        highlightColor();
+      } else {
+        document.getElementById('modalTitle').textContent = 'New Note';
+        document.getElementById('noteId').value = '';
+        selectedColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+        document.getElementById('deleteNoteBtn').classList.add('hidden');
+        highlightColor();
+      }
+      modal.classList.add('show');
+    }
+
+    function closeNoteModal() { document.getElementById('noteModal').classList.remove('show'); }
+
+    function initColorPicker() {
+      const cp = document.getElementById('colorPicker');
+      cp.innerHTML = COLORS.map(c => `<div class="color-swatch" style="background:${c}" data-color="${c}" onclick="pickColor('${c}')"></div>`).join('');
+    }
+
+    function pickColor(c) { selectedColor = c; highlightColor(); }
+    function highlightColor() {
+      document.querySelectorAll('.color-swatch').forEach(s => {
+        s.classList.toggle('active', s.dataset.color === selectedColor);
+      });
+    }
+
+    document.getElementById('noteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('noteSubmitBtn');
+      btn.classList.add('loading'); btn.disabled = true;
+      const id = document.getElementById('noteId').value;
+      const body = {
+        title: document.getElementById('noteTitle').value.trim(),
+        content: document.getElementById('noteContent').value,
+        color: selectedColor
+      };
+
+      try {
+        const res = await fetch(id ? `/api/notes/${id}` : '/api/notes', {
+          method: id ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        closeNoteModal();
+        toast(id ? 'Note updated' : 'Note created', 'success');
+        await loadNotes();
+      } catch (err) {
+        const al = document.getElementById('modalAlert');
+        al.textContent = err.message; al.className = 'alert error show';
+      } finally { btn.classList.remove('loading'); btn.disabled = false; }
+    });
+
+    async function togglePin(id) {
+      await fetch(`/api/notes/${id}/pin`, { method: 'PUT' });
+      toast('Pin toggled', 'success');
+      await loadNotes();
+    }
+
+    function deleteNote(id) {
+      deleteTargetId = id || document.getElementById('noteId').value;
+      closeNoteModal();
+      document.getElementById('deleteModal').classList.add('show');
+    }
+    function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('show'); deleteTargetId = null; }
+    async function confirmDelete() {
+      if (!deleteTargetId) return;
+      await fetch(`/api/notes/${deleteTargetId}`, { method: 'DELETE' });
+      closeDeleteModal();
+      toast('Note deleted', 'success');
+      await loadNotes();
+    }
+
+    // ===== Sections =====
+    function showSection(name) {
+      document.querySelectorAll('[id^="section-"]').forEach(s => s.classList.add('hidden'));
+      document.getElementById(`section-${name}`).classList.remove('hidden');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById(`nav-${name}`)?.classList.add('active');
+    }
+
+    // ===== Profile =====
+    document.getElementById('profileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('profileSubmit');
+      btn.classList.add('loading'); btn.disabled = true;
+      try {
+        const res = await fetch('/api/auth/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            displayName: document.getElementById('profileDisplayName').value.trim(),
+            email: document.getElementById('profileEmail').value.trim(),
+            currentPassword: document.getElementById('currentPassword').value,
+            newPassword: document.getElementById('newPassword').value
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        toast('Profile updated!', 'success');
+        document.getElementById('currentPassword').value = '';
+        document.getElementById('newPassword').value = '';
+        // Refresh user data
+        const meRes = await fetch('/api/auth/me');
+        const meData = await meRes.json();
+        currentUser = meData.user;
+        renderUserInfo();
+      } catch (err) {
+        const al = document.getElementById('profileAlert');
+        al.textContent = err.message; al.className = 'alert error show';
+      } finally { btn.classList.remove('loading'); btn.disabled = false; }
+    });
+
+    // ===== Logout =====
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    // ===== Utilities =====
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function timeAgo(dateStr) {
+      const s = Math.floor((Date.now() - new Date(dateStr+'Z').getTime()) / 1000);
+      if (s < 60) return 'Just now';
+      if (s < 3600) return `${Math.floor(s/60)}m ago`;
+      if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+      return `${Math.floor(s/86400)}d ago`;
+    }
+    function toast(msg, type='success') {
+      const c = document.getElementById('toastContainer');
+      const t = document.createElement('div');
+      t.className = `toast ${type}`;
+      t.innerHTML = `${type==='success'?'✓':'✕'} ${msg}`;
+      c.appendChild(t);
+      setTimeout(() => { t.classList.add('fade-out'); setTimeout(() => t.remove(), 300); }, 3000);
+    }
+
+    // Close modals on backdrop click
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      m.addEventListener('click', (e) => { if (e.target === m) m.classList.remove('show'); });
+    });
+
+    init();
+  </script>
+</body>
+</html>

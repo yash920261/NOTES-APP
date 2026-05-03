@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="DEKNEK — A modern, secure platform for organizing your thoughts and notes.">
+  <title>DEKNEK — Your Personal Workspace</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="bg-glow"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+
+  <nav class="navbar" id="navbar">
+    <a href="/" class="logo">DEKNEK</a>
+    <div class="nav-links">
+      <a href="/login.html">Log in</a>
+      <a href="/signup.html" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge"><span class="dot"></span> Now with real-time sync</div>
+    <h1>Your ideas,<br><span class="gradient">beautifully organized</span></h1>
+    <p>A secure, blazing-fast workspace to capture your thoughts, organize your projects, and stay on top of everything that matters.</p>
+    <div class="hero-actions">
+      <a href="/signup.html" class="btn btn-primary">Start for free →</a>
+      <a href="/login.html" class="btn btn-secondary">I have an account</a>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature-card">
+      <div class="icon" style="background:rgba(108,99,255,0.15);">🔒</div>
+      <h3>Secure Authentication</h3>
+      <p>Industry-standard bcrypt hashing, session management, and rate limiting keep your account safe.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon" style="background:rgba(255,101,132,0.15);">⚡</div>
+      <h3>Lightning Fast</h3>
+      <p>Built on Node.js with SQLite — instant reads, zero-config database, and sub-millisecond queries.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon" style="background:rgba(67,233,123,0.15);">📝</div>
+      <h3>Smart Notes</h3>
+      <p>Create, color-code, pin, and organize your notes with a beautiful, intuitive interface.</p>
+    </div>
+  </section>
+
+  <script>
+    // Check if user is logged in, update navbar
+    fetch('/api/auth/me').then(r => { if (r.ok) return r.json(); throw ''; })
+      .then(data => {
+        document.querySelector('.nav-links').innerHTML =
+          `<a href="/dashboard.html" class="btn btn-primary btn-sm">Dashboard →</a>`;
+      }).catch(() => {});
+  </script>
+</body>
+</html>
