@@ -1,6 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { get, all, run } = require('../database/init');
+const User = require('../models/User');
+const Note = require('../models/Note');
+const SessionLog = require('../models/SessionLog');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -33,7 +35,8 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    const existingUser = get('SELECT id FROM users WHERE username = ? OR email = ?', [username, email]);
+    const emailLower = email.toLowerCase();
+    const existingUser = await User.findOne({ $or: [{ username }, { email: emailLower }] });
     if (existingUser) {
       return res.status(409).json({ error: 'Username or email already taken' });
     }
@@ -41,26 +44,37 @@ router.post('/signup', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
-    const result = run(
-      'INSERT INTO users (username, email, password_hash, display_name, avatar_color) VALUES (?, ?, ?, ?, ?)',
-      [username, email.toLowerCase(), passwordHash, displayName || username, avatarColor]
-    );
+    const newUser = await User.create({
+      username,
+      email: emailLower,
+      password_hash: passwordHash,
+      display_name: displayName || username,
+      avatar_color: avatarColor
+    });
 
-    run('INSERT INTO sessions_log (user_id, action, ip_address) VALUES (?, ?, ?)',
-      [result.lastInsertRowid, 'signup', req.ip]);
+    await SessionLog.create({ user_id: newUser._id, action: 'signup', ip_address: req.ip });
 
-    req.session.userId = result.lastInsertRowid;
-    req.session.username = username;
+    req.session.userId = newUser._id;
+    req.session.username = newUser.username;
 
     // Welcome note
-    run('INSERT INTO notes (user_id, title, content, color, pinned) VALUES (?, ?, ?, ?, ?)',
-      [result.lastInsertRowid, '👋 Welcome to DEKNEK!',
-       'This is your personal dashboard. Create, edit, and organize your notes here!', '#6C63FF', 1]);
+    await Note.create({
+      user_id: newUser._id,
+      title: '👋 Welcome to DEKNEK!',
+      content: 'This is your personal dashboard. Create, edit, and organize your notes here!',
+      color: '#6C63FF',
+      pinned: true
+    });
 
     return res.status(201).json({
       message: 'Account created successfully',
-      user: { id: result.lastInsertRowid, username, email: email.toLowerCase(),
-        displayName: displayName || username, avatarColor }
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        displayName: newUser.display_name,
+        avatarColor: newUser.avatar_color
+      }
     });
   } catch (err) {
     console.error('Signup error:', err);
@@ -76,22 +90,27 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Username/email and password are required' });
     }
 
-    const user = get('SELECT * FROM users WHERE username = ? OR email = ?', [login, login.toLowerCase()]);
+    const loginLower = login.toLowerCase();
+    const user = await User.findOne({ $or: [{ username: login }, { email: loginLower }] });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
 
-    run('INSERT INTO sessions_log (user_id, action, ip_address) VALUES (?, ?, ?)',
-      [user.id, 'login', req.ip]);
+    await SessionLog.create({ user_id: user._id, action: 'login', ip_address: req.ip });
 
-    req.session.userId = user.id;
+    req.session.userId = user._id;
     req.session.username = user.username;
 
     return res.json({
       message: 'Login successful',
-      user: { id: user.id, username: user.username, email: user.email,
-        displayName: user.display_name, avatarColor: user.avatar_color }
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        displayName: user.display_name,
+        avatarColor: user.avatar_color
+      }
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -100,10 +119,9 @@ router.post('/login', async (req, res) => {
 });
 
 // POST /api/auth/logout
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
   if (req.session.userId) {
-    run('INSERT INTO sessions_log (user_id, action, ip_address) VALUES (?, ?, ?)',
-      [req.session.userId, 'logout', req.ip]);
+    await SessionLog.create({ user_id: req.session.userId, action: 'logout', ip_address: req.ip });
   }
   req.session.destroy((err) => {
     if (err) return res.status(500).json({ error: 'Logout failed' });
@@ -113,22 +131,29 @@ router.post('/logout', (req, res) => {
 });
 
 // GET /api/auth/me
-router.get('/me', requireAuth, (req, res) => {
-  const user = get('SELECT id, username, email, display_name, avatar_color, created_at FROM users WHERE id = ?',
-    [req.session.userId]);
-  if (!user) return res.status(404).json({ error: 'User not found' });
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const noteCount = get('SELECT COUNT(*) as count FROM notes WHERE user_id = ?', [user.id]);
-  const loginCount = get("SELECT COUNT(*) as count FROM sessions_log WHERE user_id = ? AND action = 'login'", [user.id]);
+    const noteCount = await Note.countDocuments({ user_id: user._id });
+    const loginCount = await SessionLog.countDocuments({ user_id: user._id, action: 'login' });
 
-  return res.json({
-    user: {
-      id: user.id, username: user.username, email: user.email,
-      displayName: user.display_name, avatarColor: user.avatar_color,
-      createdAt: user.created_at,
-      stats: { notes: noteCount.count, logins: loginCount.count }
-    }
-  });
+    return res.json({
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        displayName: user.display_name,
+        avatarColor: user.avatar_color,
+        createdAt: user.created_at,
+        stats: { notes: noteCount, logins: loginCount }
+      }
+    });
+  } catch (err) {
+    console.error('Get profile error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // PUT /api/auth/profile
@@ -136,27 +161,37 @@ router.put('/profile', requireAuth, async (req, res) => {
   try {
     const { displayName, email, currentPassword, newPassword } = req.body;
     const userId = req.session.userId;
-    const user = get('SELECT * FROM users WHERE id = ?', [userId]);
+    const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    if (displayName) {
-      run('UPDATE users SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [displayName, userId]);
-    }
-    if (email && email !== user.email) {
-      const emailExists = get('SELECT id FROM users WHERE email = ? AND id != ?', [email.toLowerCase(), userId]);
+    if (displayName) user.display_name = displayName;
+
+    if (email && email.toLowerCase() !== user.email) {
+      const emailLower = email.toLowerCase();
+      const emailExists = await User.findOne({ email: emailLower, _id: { $ne: userId } });
       if (emailExists) return res.status(409).json({ error: 'Email already in use' });
-      run('UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [email.toLowerCase(), userId]);
+      user.email = emailLower;
     }
+
     if (currentPassword && newPassword) {
       const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
       if (!validPassword) return res.status(401).json({ error: 'Current password is incorrect' });
       if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
-      const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-      run('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newHash, userId]);
+      user.password_hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     }
 
-    const updatedUser = get('SELECT id, username, email, display_name, avatar_color FROM users WHERE id = ?', [userId]);
-    return res.json({ message: 'Profile updated', user: updatedUser });
+    await user.save();
+
+    return res.json({
+      message: 'Profile updated',
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        displayName: user.display_name,
+        avatarColor: user.avatar_color
+      }
+    });
   } catch (err) {
     console.error('Profile update error:', err);
     return res.status(500).json({ error: 'Internal server error' });

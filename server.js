@@ -1,16 +1,20 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 
-const { initDb } = require('./database/init');
+const connectDB = require('./database/db');
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Connect to MongoDB
+connectDB();
 
 // Security headers
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
@@ -26,12 +30,16 @@ const authLimiter = rateLimit({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Session
+// Session with MongoDB store
 app.use(session({
   name: 'deknek.sid',
   secret: process.env.SESSION_SECRET || 'fallback-secret-change-me',
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/deknek',
+    collectionName: 'sessions'
+  }),
   cookie: {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -56,12 +64,6 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
-// Initialize database then start server
-initDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`\n  🚀 NOTES APP server running at http://localhost:${PORT}\n`);
-  });
-}).catch(err => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
+app.listen(PORT, () => {
+  console.log(`\n  🚀 NOTES APP server running at http://localhost:${PORT}\n`);
 });
