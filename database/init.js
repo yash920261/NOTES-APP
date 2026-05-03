@@ -2,9 +2,7 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = process.env.VERCEL || process.env.VERCEL_ENV
-  ? path.join('/tmp', 'deknek.db')
-  : path.join(__dirname, '..', 'deknek.db');
+const DB_PATH = path.join(__dirname, '..', 'deknek.db');
 
 let db = null;
 
